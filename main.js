@@ -14,8 +14,9 @@ firebase.initializeApp(firebaseConfig);
 // Reference to the Realtime Database
 const database = firebase.database();
 
-// Reference to the sensor data (entire PZEM-400t object)
+// Reference to the sensor data and chart data
 const sensorRef = database.ref('sensorData/');
+const chartDataRef = database.ref('chartData/');
 
 // Chart setup
 let dataPoints = [];
@@ -30,7 +31,27 @@ let chart = new CanvasJS.Chart("chartContainer", {
   }]
 });
 
-chart.render(); // Initial chart render
+// Function to update chart data in Firebase
+function saveChartData() {
+  chartDataRef.set(dataPoints.map(point => ({
+    x: point.x.getTime(),  // Save timestamps
+    y: point.y
+  })));
+}
+
+// Fetch and initialize the chart with saved data
+chartDataRef.once('value', (snapshot) => {
+  const savedData = snapshot.val();
+  if (savedData) {
+    savedData.forEach(point => {
+      dataPoints.push({
+        x: new Date(point.x),  // Convert timestamp back to Date object
+        y: point.y
+      });
+    });
+    chart.render();  // Render the chart with the previous data
+  }
+});
 
 // Real-time Firebase data fetching and chart update
 sensorRef.on('value', (snapshot) => {
@@ -59,6 +80,9 @@ sensorRef.on('value', (snapshot) => {
 
     // Re-render the chart with updated data
     chart.render();
+
+    // Save the updated chart data to Firebase
+    saveChartData();
   } else {
     console.log('No data available');
   }
