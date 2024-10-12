@@ -1,3 +1,4 @@
+// Firebase Configuration
 const firebaseConfig = {
   apiKey: "AIzaSyCu1mQApkRU9k_m_GdpUKkfmAXCTDQpPfw",
   authDomain: "energy-meter-2deb1.firebaseapp.com",
@@ -18,6 +19,44 @@ const database = firebase.database();
 const sensorRef = database.ref('sensorData/');
 const chartDataRef = database.ref('chartData/');
 
+// Select the button
+const toggleButton = document.getElementById('toggleButton');
+
+// Create a variable to track the toggle state (0 or 1)
+let toggleState = 0;
+
+// Function to write to Firebase
+function writeToFirebase(value) {
+    firebase.database().ref('toggleState').set({
+        state: value
+    });
+}
+
+// Event listener for button click
+// Event listener for button click
+toggleButton.addEventListener('click', () => {
+  // Ask for confirmation before toggling
+  const confirmToggle = confirm('Are you sure you want to Reset the Energy?');
+  
+  if (confirmToggle) {
+      // Toggle between 0 and 1
+      toggleState = toggleState === 0 ? 1 : 0;
+
+      // Write the new state to Firebase
+      writeToFirebase(toggleState);
+
+      // Update button text to reflect current state
+      toggleButton.innerText = toggleState === 0 ? 'Energy Reset' : 'Energy Reset';
+  } else {
+      // User canceled the toggle action
+      console.log('Toggle canceled by the user.');
+  }
+});
+
+
+// Initialize button text
+toggleButton.innerText = 'Energy Reset';
+
 // Chart setup
 let dataPoints = [];
 let chart = new CanvasJS.Chart("chartContainer", {
@@ -31,6 +70,14 @@ let chart = new CanvasJS.Chart("chartContainer", {
   }]
 });
 
+// Function to check if a date is today
+function isToday(date) {
+  const today = new Date();
+  return date.getFullYear() === today.getFullYear() &&
+         date.getMonth() === today.getMonth() &&
+         date.getDate() === today.getDate();
+}
+
 // Function to update chart data in Firebase
 function saveChartData() {
   chartDataRef.set(dataPoints.map(point => ({
@@ -39,24 +86,27 @@ function saveChartData() {
   })));
 }
 
-// Fetch and initialize the chart with saved data
+// Fetch and initialize the chart with saved data from today only
 chartDataRef.once('value', (snapshot) => {
   const savedData = snapshot.val();
   if (savedData) {
     savedData.forEach(point => {
-      dataPoints.push({
-        x: new Date(point.x),  // Convert timestamp back to Date object
-        y: point.y
-      });
+      const pointDate = new Date(point.x);
+      if (isToday(pointDate)) {
+        dataPoints.push({
+          x: pointDate,  // Convert timestamp back to Date object
+          y: point.y
+        });
+      }
     });
-    chart.render();  // Render the chart with the previous data
+    chart.render();  // Render the chart with the filtered data
   }
 });
 
-// Real-time Firebase data fetching and chart update
+// Real-time Firebase data fetching and chart update for current day only
 sensorRef.on('value', (snapshot) => {
   const data = snapshot.val(); // Get the data object from Firebase
-  
+
   if (data) {
     // Update the values on the web page
     document.getElementById('voltage').innerText = data.voltage || '--';
@@ -70,19 +120,22 @@ sensorRef.on('value', (snapshot) => {
     const xValue = new Date();  // Use the current timestamp for x-axis
     const yValue = parseFloat(data.energy) || 0;  // Using energy for y-axis data
 
-    // Add new data point to the chart
-    dataPoints.push({ x: xValue, y: yValue });
+    // Only add data points if the date is today
+    if (isToday(xValue)) {
+      // Add new data point to the chart
+      dataPoints.push({ x: xValue, y: yValue });
 
-    // Limit the number of data points to avoid overcrowding the chart
-    if (dataPoints.length > 500) {
-      dataPoints.shift();
+      // Limit the number of data points to avoid overcrowding the chart
+      if (dataPoints.length > 500) {
+        dataPoints.shift();
+      }
+
+      // Re-render the chart with updated data
+      chart.render();
+
+      // Save the updated chart data to Firebase
+      saveChartData();
     }
-
-    // Re-render the chart with updated data
-    chart.render();
-
-    // Save the updated chart data to Firebase
-    saveChartData();
   } else {
     console.log('No data available');
   }
